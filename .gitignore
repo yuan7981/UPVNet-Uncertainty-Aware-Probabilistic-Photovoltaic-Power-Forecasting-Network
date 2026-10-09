@@ -1,0 +1,33 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+.venv/
+venv/
+env/
+
+# --- Datasets and run artifacts ---
+# Raw third-party data (PVOD / DKASC) and preprocessed splits are not
+# redistributed here; see the README for how to obtain and regenerate them.
+data/
+preprocessed/
+*.pth
+*.pt
+*.ckpt
+*.npz
+*.log
+
+# --- Manuscript and submission material ---
+# Kept out of the public repo for copyright reasons.
+*UPVNet_2026_PRICAI*.pdf
+*anonymous*.pdf
+paper/
+!paper/README.md
+
+# --- Local editor / tooling ---
+.claude/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

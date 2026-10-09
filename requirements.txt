@@ -1,0 +1,9 @@
+# Core runtime
+torch>=2.0
+numpy>=1.23
+pandas>=2.0
+scikit-learn>=1.2
+scipy>=1.10
+
+# Plotting (used by the optional figure scripts)
+matplotlib>=3.7

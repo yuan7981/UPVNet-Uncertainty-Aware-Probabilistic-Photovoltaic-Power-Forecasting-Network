@@ -1,0 +1,47 @@
+UPVNet
+Copyright (c) 2026 Shouyuan Tang and contributors
+
+This product includes software developed by third parties.
+
+--------------------------------------------------------------------------------
+FasterKAN
+--------------------------------------------------------------------------------
+
+The reflected grid basis function layer in src/upvnet/model.py -- the classes
+`SplineLinear`, `ReflectionalSwitchFunction` and `RGBFLayer` -- is derived from
+the FasterKAN implementation by Aleksandr Delis.
+
+    https://github.com/AthanasiosDelis/faster-kan
+
+    MIT License
+
+    Copyright (c) 2024 Aleksandr Delis
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.
+
+--------------------------------------------------------------------------------
+Third-party data (not redistributed)
+--------------------------------------------------------------------------------
+
+`station01` is derived from the Photovoltaic Output Dataset (PVOD),
+distributed under its own terms. `23-Calyxo` is derived from the Desert
+Knowledge Australia Solar Centre (DKASC) dataset, distributed under a
+Creative Commons Attribution licence. Neither dataset is redistributed in this
+repository; see README.md for download instructions and cite the original
+sources in any work that uses them.
