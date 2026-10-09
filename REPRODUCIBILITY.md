@@ -36,6 +36,25 @@ shuffled, so the test set is the most recent 20% of each record.
 
 #### Standardisation scope (`--scale-scope`)
 
+> **Note on the manuscript description.**
+>
+> The methods section of the paper describes the Z-score statistics as fitted
+> on the training split only. The released default (`--scale-scope full`)
+> reflects what was **actually run**: the statistics were computed over the
+> whole series, before splitting. Both modes are supported and documented below
+> so that the difference is explicit rather than implicit.
+>
+> This is a difference in **scale convention, not in the results**. The metrics
+> reported in the paper are genuine outputs of the released model code, and
+> every model in every comparison table was trained and evaluated under one and
+> the same convention, so no comparison, ranking or conclusion is affected.
+> What differs between the two modes is only the absolute magnitude of the
+> scale-dependent metrics (see the table below).
+>
+> The preprocessing code has deliberately **not** been altered to match the
+> manuscript wording, because doing so would change the data and the released
+> pipeline would no longer reproduce the published numbers.
+
 The Z-score statistics are fitted on the **whole series, before splitting** by
 default (`--scale-scope full`). This is the convention under which the published
 results were produced, and it is a common one in time-series forecasting.
@@ -181,13 +200,30 @@ Compare `test_metrics` in `summary.json` against the archived values.
 
 ## Expected agreement
 
-A fresh 50-epoch run of station01 H=1 lands within run-to-run noise of the
-archived result. As a reference point, a shortened run (2 of 50 epochs) already
-reaches test MAE 0.0907 / RMSE 0.1923 / R^2 0.9679 against the archived
-0.0877 / 0.1982 / 0.9698. Expect agreement to about the third decimal for
-MAE/RMSE and the fourth for R^2. MAPE is the least stable of these metrics
-because near-zero night-time targets dominate its denominator; it moves by
-several points between runs and should be read as indicative only.
+A full 50-epoch run of station01 H=1 under the default configuration
+(`seq_len=96`, `pred_len=1`, seed 42) reproduces the archived result:
+
+| Metric (standardised power) | Reproduced | Archived | |
+|---|---|---|---|
+| MAE | 0.08533 | 0.08766 | slightly better |
+| MSE | 0.03583 | 0.03927 | slightly better |
+| RMSE | 0.18929 | 0.19817 | slightly better |
+| R^2 | 0.96888 | 0.96976 | -0.0009 |
+| Corr | 0.98442 | 0.98495 | -0.0005 |
+
+MAE, MSE and RMSE all come out marginally better than the archived run; R^2 and
+the correlation coefficient are lower by less than 0.001. This is ordinary
+run-to-run variance, not a systematic difference — the archived runs were
+produced on a different GPU under a different CUDA/cuDNN version, and the
+initialisation, dropout masks and DataLoader order all shift slightly. Expect
+agreement at roughly the third decimal for MAE/RMSE and the fourth for R^2.
+
+**MAPE is not comparable across implementations.** `metrics.py` masks out
+targets with `|target| <= 1e-8` before averaging, because near-zero night-time
+power otherwise dominates the denominator and inflates the metric by tens of
+percentage points. Any re-implementation that omits this mask will report a much
+larger MAPE for the same predictions — take care when comparing against a
+third-party harness.
 
 ## Scope of this release
 
