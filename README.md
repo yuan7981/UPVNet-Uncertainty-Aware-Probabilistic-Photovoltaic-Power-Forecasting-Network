@@ -50,9 +50,20 @@ Preprocessing (`src/preprocess/common_preprocess.py`) applies, in order:
 timestamp de-duplication and alignment to a 15-minute grid; a physical
 night-time mask (GHI < 10 W/m^2 forces power to 0); linear interpolation with
 `limit=4`; cyclical hour/month encodings; a hemisphere-aware season label; a
-`K=4` K-Means weather-condition label over (GHI, temperature, humidity); a
-chronological **7:1:2** train/val/test split (70% / 10% / 20%); and Z-score
-standardisation **fitted on the training split only** (anti-leakage).
+`K=4` K-Means weather-condition label over (GHI, temperature, humidity); and a
+chronological **7:1:2** train/val/test split (70% / 10% / 20%).
+
+The final Z-score standardisation has two modes, selected with `--scale-scope`:
+
+| Mode | Statistics fitted on | Notes |
+|---|---|---|
+| `full` (default) | the whole series, before splitting | Reproduces the published results. A standard convention in time-series forecasting. |
+| `train` | the train split only | Strict anti-leakage. Produces a ~6% smaller standardised scale, so absolute MAE/RMSE are not comparable with the paper. |
+
+`R^2` and the correlation coefficient are unaffected by this choice, and all
+comparisons reported in the paper are between models trained on identical data,
+so they remain valid under either mode. See
+[`REPRODUCIBILITY.md`](REPRODUCIBILITY.md) for the measured difference.
 
 ## Install
 
@@ -90,6 +101,9 @@ CPU inference works but training will be slow.
 
    Horizons used in the paper: `--pred-len 1` (15 min), `4` (1 h), `24` (6 h),
    `96` (24 h). You can also pass `--horizon 15min|1h|6h|24h`.
+
+   `--dataset` must match the folder name under `preprocessed/`. The two
+   datasets used in the paper are `station01` and `23-Calyxodataset`.
 
 Everything the model needs is pinned by default in
 [`src/upvnet/train.py`](src/upvnet/train.py) (`TrainConfig`), so no extra flags

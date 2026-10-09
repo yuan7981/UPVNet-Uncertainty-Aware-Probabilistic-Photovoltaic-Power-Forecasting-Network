@@ -1,9 +1,12 @@
+import argparse
 import json
 import os
 import shutil
 from dataclasses import dataclass
 from typing import Optional, Tuple, Dict, Literal
 
+import matplotlib
+matplotlib.use("Agg")  # headless-safe: figures are written to disk, never shown
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -143,10 +146,11 @@ def perform_clustering(df: pd.DataFrame, hemisphere: str = 'north') -> pd.DataFr
     return df
 
 def preprocess_and_split(
-    df_raw: pd.DataFrame, 
-    resample_rule: Optional[str], 
+    df_raw: pd.DataFrame,
+    resample_rule: Optional[str],
     downsample_from: Optional[str] = None,
-    hemisphere: str = 'north'  # 新增参数
+    hemisphere: str = 'north',  # 新增参数
+    scale_scope: str = 'full',
 ) -> SplitData:
     
     # 1. 基础清洗与重采样
@@ -210,17 +214,22 @@ def preprocess_and_split(
     val_df = cleaned.iloc[train_end:val_end].copy()
     test_df = cleaned.iloc[val_end:].copy()
     
-    # 6. 数据泄露防护标准化 (Fit on Train ONLY)
+    # 6. 标准化 (Z-score)
+    # `scale_scope` 决定统计量的拟合范围:
+    #   "full"  -> 在整个序列 (train+val+test) 上拟合。这是产生论文结果的设置,
+    #              也是时间序列预测中的常见做法。
+    #   "train" -> 仅在训练集上拟合 (严格防泄漏)。
+    # 详见 REPRODUCIBILITY.md 的 "Standardisation scope" 一节。
     exclude_cols = ["timestamp", "season_cluster", "weather_cluster"]
     scale_cols = [c for c in COMMON_COLUMNS if c not in exclude_cols]
-    
+
     scaler = StandardScaler()
-    
-    # 仅在有数据的 Train 上拟合
+
+    fit_df = cleaned if scale_scope == "full" else train_df
     # 注意：由于interpolate加了limit，这里可能仍有NaN，StandardScaler不能处理NaN
     # 策略：Fit时先fillna(0)，这比crash好，也是工业界常用做法
-    if len(train_df) > 0:
-        scaler.fit(train_df[scale_cols].fillna(0))
+    if len(fit_df) > 0:
+        scaler.fit(fit_df[scale_cols].fillna(0))
     
     # Transform 所有数据集
     for sub_df in [train_df, val_df, test_df, cleaned]:
@@ -233,7 +242,8 @@ def preprocess_and_split(
         "end": str(cleaned["timestamp"].max()) if len(cleaned) else None,
         "scaler_mean": scaler.mean_.tolist() if hasattr(scaler, "mean_") else [],
         "scaler_scale": scaler.scale_.tolist() if hasattr(scaler, "scale_") else [],
-        "hemisphere_used": hemisphere
+        "hemisphere_used": hemisphere,
+        "scale_scope": scale_scope,
     }
 
     return SplitData(train_df, val_df, test_df, cleaned, scaler, summary, missing_summary)
@@ -378,3 +388,127 @@ def save_artifacts(data: SplitData, output_dir: str, dataset_name: str) -> None:
     )
 
     print(f"[INFO] {dataset_name} processing complete. (Hemisphere: {data.summary['hemisphere_used']})")
+
+# ================= 命令行入口 (CLI) =================
+
+def process_one(
+    name: str,
+    src_csv: str,
+    out_dir: str,
+    source: str = "pvod",
+    resample: Optional[str] = "15min",
+    downsample_from: Optional[str] = None,
+    hemisphere: str = "north",
+    scale_scope: str = "full",
+) -> "SplitData":
+    """Run the full pipeline for a single raw CSV and write the split artifacts."""
+    raw = read_csv_robust(src_csv)
+    if source == "pvod":
+        common = build_common_from_pvod(raw)
+    elif source == "dka":
+        common = build_common_from_dka(raw)
+    else:
+        raise ValueError(f"unknown source '{source}' (expected 'pvod' or 'dka')")
+
+    data = preprocess_and_split(
+        common,
+        resample_rule=resample,
+        downsample_from=downsample_from,
+        hemisphere=hemisphere,
+        scale_scope=scale_scope,
+    )
+    save_artifacts(data, out_dir, name)
+    return data
+
+
+# Hemisphere for each raw source. PVOD (station00..08) is in Hebei, China;
+# every DKASC / DKA site is in Alice Springs, Australia.
+SOURCE_HEMISPHERE = {"pvod": "north", "dka": "south"}
+
+
+def _load_config(path: str) -> dict:
+    with open(path, "r", encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def _resolve(root: str, *parts: str) -> str:
+    return os.path.join(root, *parts)
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(
+        description="Clean, engineer features, split 7:1:2 and standardise raw PV data."
+    )
+    ap.add_argument(
+        "--config",
+        default=os.path.join(os.path.dirname(__file__), "..", "..", "configs", "preprocess_config.json"),
+        help="JSON config listing datasets and I/O roots",
+    )
+    ap.add_argument("--dataset", default=None, help="process only this dataset (by name from the config)")
+    ap.add_argument("--all", action="store_true", help="process every dataset in the config")
+    ap.add_argument("--input", default=None, help="ad-hoc mode: path to a raw CSV")
+    ap.add_argument("--source", choices=["pvod", "dka"], default=None, help="ad-hoc mode: raw schema")
+    ap.add_argument("--out-dir", default=None, help="ad-hoc mode: output directory")
+    ap.add_argument("--hemisphere", choices=["north", "south"], default=None)
+    ap.add_argument(
+        "--scale-scope",
+        choices=["full", "train"],
+        default=None,
+        help="fit the Z-score statistics on the whole series ('full', default; "
+             "this is what produced the published results) or on the train split "
+             "only ('train', strict anti-leakage)",
+    )
+    ap.add_argument("--resample", default="15min")
+    ap.add_argument("--downsample-from", default=None)
+    args = ap.parse_args(argv)
+
+    # --- ad-hoc single file mode ---
+    if args.input:
+        if not args.source or not args.out_dir:
+            ap.error("--input requires --source and --out-dir")
+        name = args.dataset or os.path.splitext(os.path.basename(args.input))[0]
+        hemi = args.hemisphere or SOURCE_HEMISPHERE[args.source]
+        process_one(name, args.input, args.out_dir, args.source,
+                    args.resample, args.downsample_from, hemi,
+                    args.scale_scope or "full")
+        return 0
+
+    # --- config-driven mode ---
+    cfg = _load_config(args.config)
+    paths = cfg.get("paths", {})
+    in_root = paths.get("input_root", "data")
+    out_root = paths.get("output_root", "preprocessed")
+
+    jobs = []
+    for source, entries in cfg.get("datasets", {}).items():
+        for entry in entries:
+            jobs.append((source, entry))
+
+    if args.dataset:
+        jobs = [j for j in jobs if j[1].get("name") == args.dataset]
+        if not jobs:
+            ap.error(f"dataset '{args.dataset}' not found in {args.config}")
+    elif not args.all:
+        ap.error("pass --dataset <name>, --all, or --input <csv>")
+
+    for source, entry in jobs:
+        name = entry["name"]
+        src = _resolve(in_root, entry["file"])
+        out = _resolve(out_root, name)
+        if not os.path.exists(src):
+            print(f"[SKIP] {name}: raw file not found at {src}")
+            continue
+        print(f"[RUN ] {name}  <- {src}")
+        hemi = args.hemisphere or SOURCE_HEMISPHERE.get(source, "north")
+        process_one(
+            name, src, out, source,
+            entry.get("resample", args.resample),
+            entry.get("downsample_from", args.downsample_from),
+            hemi,
+            args.scale_scope or cfg.get("scale_scope", "full"),
+        )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

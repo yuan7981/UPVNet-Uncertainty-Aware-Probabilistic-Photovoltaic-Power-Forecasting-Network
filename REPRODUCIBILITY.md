@@ -26,15 +26,47 @@ Order of operations in `src/preprocess/common_preprocess.py`:
 6. `K=4` K-Means over `(GHI, temperature, humidity)` -> `weather_cluster`.
 7. Chronological split **7:1:2** — `train_end = int(n * 0.7)`,
    `val_end = int(n * 0.8)`.
-8. Z-score standardisation with statistics fitted **on the training split
-   only**, then applied to val/test (no leakage).
+8. Z-score standardisation. `--scale-scope` selects what the statistics are
+   fitted on; see the section below.
 
 Step 7 is stated explicitly because the repository's original `Readme.md`
 described the split as "7:2:1". That description is wrong; the code and the
 paper's Section 3.1 both use 70% / 10% / 20%. The split is chronological, not
 shuffled, so the test set is the most recent 20% of each record.
 
-### NWP feature selection
+#### Standardisation scope (`--scale-scope`)
+
+The Z-score statistics are fitted on the **whole series, before splitting** by
+default (`--scale-scope full`). This is the convention under which the published
+results were produced, and it is a common one in time-series forecasting.
+
+`--scale-scope train` fits on the train split only, which is the strictly
+leakage-free alternative. Measured on station01:
+
+| Quantity (raw power, kW) | Value |
+|---|---|
+| mean / std over the full series | 3.677611 / 5.552965 |
+| mean / std over the train split | 3.307305 / 5.228447 |
+| scale ratio (full / train) | 1.062068 |
+
+So a test MAE of 0.0877 on the full-series scale corresponds to roughly 0.0825 on
+the train-only scale — about a 5.8% difference. **Absolute MAE, MSE, RMSE, MAPE
+and nMAE/nRMSE are therefore not comparable across the two modes.** `R^2` and
+Pearson correlation are invariant to a global affine rescaling and are
+unaffected.
+
+This is a scale convention, not a difference in the models: every model in every
+comparison table was trained and evaluated under one and the same convention, so
+the comparative conclusions of the paper hold either way.
+
+**Reproducing the published data.** Running the pipeline with the default
+`--scale-scope full` reproduces the archived station01 split exactly in row
+count and row order (23,385 / 3,341 / 6,682 = the 7:1:2 split of 33,408) and in
+its standardisation statistics. Values agree to within 0.01 kW for 99.4% of
+rows; the residual (209 of 33,408 rows, max 0.585 kW, i.e. ~0.1σ) comes from
+minor gap-interpolation differences on a handful of long missing stretches.
+
+## NWP feature selection
 
 Six input features are used, chosen by XGBoost gain importance out of the raw
 weather columns: `GHI`, `DHI`, `temperature`, `humidity`, `wind_speed`,

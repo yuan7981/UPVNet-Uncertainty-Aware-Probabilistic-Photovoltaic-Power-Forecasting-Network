@@ -1,9 +1,11 @@
 {
   "paths": {
-    "input_root": "E:\\science\\UPV-Net\\data",
-    "output_root": "E:\\science\\UPV-Net\\preprocessed",
-    "results_root": "E:\\science\\UPV-Net\\results"
+    "input_root": "data",
+    "output_root": "preprocessed",
+    "results_root": "results"
   },
+  "_comment_paths": "All paths are relative to the repository root. Put the raw PVOD / DKASC CSVs under data/ before running src.preprocess.common_preprocess.",
+
   "datasets": {
     "pvod": [
       {"name": "station00", "file": "station00.csv", "resample": "15min"},
@@ -22,15 +24,22 @@
       {"name": "7-First-Solar_dataset", "file": "7-First-Solar dataset.csv", "resample": "15min", "downsample_from": "5min"}
     ]
   },
+  "_comment_datasets": "The two datasets used in the paper are 'station01' (PVOD, northern hemisphere) and '23-Calyxodataset' (DKASC, southern hemisphere). Hemisphere is inferred from the 'pvod' / 'dka' group.",
+
+  "scale_scope": "full",
+  "_comment_scale_scope": "'full' = fit the Z-score statistics on the whole series before splitting (reproduces the published results). 'train' = fit on the train split only (strict anti-leakage, ~6% smaller scale). Overridable with --scale-scope.",
+
   "training": {
+    "seq_len": 96,
+    "_comment_seq_len": "Fixed input window (96 steps = 24 h at 15-min resolution) for every horizon, as in the paper. This is the value train_upvnet.py uses.",
     "time_horizons": {
-      "15min": {"seq_len": 1, "pred_len": 1, "description": "15-minute ahead prediction"},
-      "1h": {"seq_len": 4, "pred_len": 4, "description": "1-hour ahead prediction"},
-      "6h": {"seq_len": 24, "pred_len": 24, "description": "6-hour ahead prediction"},
-      "24h": {"seq_len": 96, "pred_len": 96, "description": "24-hour ahead prediction"}
+      "15min": {"pred_len": 1,  "description": "15-minute-ahead prediction"},
+      "1h":    {"pred_len": 4,  "description": "1-hour-ahead prediction"},
+      "6h":    {"pred_len": 24, "description": "6-hour-ahead prediction"},
+      "24h":   {"pred_len": 96, "description": "24-hour-ahead prediction"}
     },
     "default_params": {
-      "epochs": 100,
+      "epochs": 50,
       "batch_size": 32,
       "learning_rate": 0.001,
       "early_stopping_patience": 10
