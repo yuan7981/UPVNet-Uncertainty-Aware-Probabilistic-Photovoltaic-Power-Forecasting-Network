@@ -200,30 +200,54 @@ Compare `test_metrics` in `summary.json` against the archived values.
 
 ## Expected agreement
 
-A full 50-epoch run of station01 H=1 under the default configuration
-(`seq_len=96`, `pred_len=1`, seed 42) reproduces the archived result:
+A full run of station01 H=1 under the default configuration (`seq_len=96`,
+`pred_len=1`, seed 42), driven through `scripts/train_upvnet.py` with the
+metrics computed by `src/upvnet/metrics.py`, reproduces the archived result:
 
 | Metric (standardised power) | Reproduced | Archived | |
 |---|---|---|---|
-| MAE | 0.08533 | 0.08766 | slightly better |
-| MSE | 0.03583 | 0.03927 | slightly better |
-| RMSE | 0.18929 | 0.19817 | slightly better |
-| R^2 | 0.96888 | 0.96976 | -0.0009 |
-| Corr | 0.98442 | 0.98495 | -0.0005 |
+| MAE | 0.08374 | 0.08766 | better |
+| MSE | 0.03543 | 0.03927 | better |
+| RMSE | 0.18822 | 0.19817 | better |
+| R^2 | 0.96923 | 0.96976 | -0.0005 |
+| Corr | 0.98475 | 0.98495 | -0.0002 |
+| MAPE | 74.66 | 37.42 | see below |
 
-MAE, MSE and RMSE all come out marginally better than the archived run; R^2 and
-the correlation coefficient are lower by less than 0.001. This is ordinary
-run-to-run variance, not a systematic difference — the archived runs were
-produced on a different GPU under a different CUDA/cuDNN version, and the
-initialisation, dropout masks and DataLoader order all shift slightly. Expect
-agreement at roughly the third decimal for MAE/RMSE and the fourth for R^2.
+(The run early-stopped at epoch 31, best epoch 21; 109,258 total / 109,250
+trainable parameters.)
 
-**MAPE is not comparable across implementations.** `metrics.py` masks out
-targets with `|target| <= 1e-8` before averaging, because near-zero night-time
-power otherwise dominates the denominator and inflates the metric by tens of
-percentage points. Any re-implementation that omits this mask will report a much
-larger MAPE for the same predictions — take care when comparing against a
-third-party harness.
+MAE, MSE and RMSE all come out better than the archived run; R^2 and the
+correlation coefficient are within 0.0005. This is ordinary run-to-run variance,
+not a systematic difference — the archived runs were produced on a different GPU
+under a different CUDA/cuDNN version, and the initialisation, dropout masks and
+DataLoader order all shift slightly.
+
+### MAPE is not a stable metric here
+
+MAPE is the one reported metric that does not reproduce, and it should not be
+used to compare against the archived numbers.
+
+The target is standardised power, which crosses zero, so the MAPE denominator
+`|target|` becomes arbitrarily small for some samples and the mean is dominated
+by them. On the reproduced station01 test split (6,586 samples):
+
+| | MAPE |
+|---|---|
+| all samples | 74.66 |
+| excluding the 216 samples (3.28%) with `|target| <= 0.1` | 12.73 |
+
+Removing 3.28% of the samples changes the metric by a factor of 5.9. The
+archived value of 37.42 sits inside that spread. Note that `metrics.py` masks
+`|target| <= 1e-8`, which removes nothing here — no target is that close to
+zero.
+
+MAPE on a mean-centred target is therefore a poorly conditioned statistic: its
+value depends almost entirely on how a handful of near-zero samples happen to
+fall, and it is sensitive to the exact split, the seed and the early-stopping
+epoch. MAE, RMSE and R^2 are the metrics to use for reproduction checks. If a
+worked example of MAPE is needed, report it on the physical (kW) target, where
+the denominator is bounded away from zero for daytime samples.
+
 
 ## Scope of this release
 
